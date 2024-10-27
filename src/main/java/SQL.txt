@@ -1,0 +1,241 @@
+Below contains all the SQL used in the code:
+
+-- RELATION CREATION --
+
+CREATE TABLE IF NOT EXISTS Accounts(
+    userID SERIAL PRIMARY KEY,
+    firstName VARCHAR(30),
+    lastName VARCHAR(30),
+    email VARCHAR(100) CHECK(email LIKE '_%@_%.__%') UNIQUE,
+    password VARCHAR(100),
+);
+
+CREATE TABLE IF NOT EXISTS StockLists(
+    stockListID SERIAL PRIMARY KEY,
+    stockListName VARCHAR(30),
+    category VARCHAR(17),
+    CHECK (category IN ('private', 'shared', 'public', 'linkedToPortfolio'))
+);
+
+CREATE TABLE IF NOT EXISTS Reviews(
+    userID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    stockListID INT REFERENCES StockLists(stockListID) ON DELETE CASCADE,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    response VARCHAR(4000),
+    PRIMARY KEY(userID, stockListID)
+);
+
+CREATE TABLE IF NOT EXISTS Portfolios(
+    portfolioID SERIAL PRIMARY KEY,
+    portfolioName VARCHAR(30),
+    cashAvailable FLOAT DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS Stocks(
+    symbol VARCHAR(10) PRIMARY KEY,
+    stockName VARCHAR(30)
+);
+
+CREATE TABLE IF NOT EXISTS DailyStocks(
+    symbol VARCHAR(10) REFERENCES Stocks(symbol),
+    timestamp DATE,
+    open FLOAT,
+    close FLOAT,
+    high FLOAT,
+    low FLOAT,
+    volume INT,
+    PRIMARY KEY(symbol, timestamp)
+);
+
+CREATE TABLE IF NOT EXISTS ReviewRequests(
+    sentUserID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    receivedUserID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    stockListID INT REFERENCES StockLists(stockListID) ON DELETE CASCADE,
+    dateTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(sentUserID, receivedUserID, stockListID)
+);
+
+CREATE TABLE IF NOT EXISTS Friends(
+    user1 INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    user2 INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    status VARCHAR(30) DEFAULT 'added',
+    dateTimeAddedDeleted TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(user1, user2)
+);
+
+CREATE TABLE IF NOT EXISTS FriendRequests(
+    sentUserID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    receivedUserID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    status VARCHAR(30) DEFAULT 'pending',
+    dateTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (sentUserID, receivedUserID)
+);
+
+CREATE TABLE IF NOT EXISTS OwnsPortfolio(
+    userID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    portfolioID INT REFERENCES Portfolios(portfolioID) ON DELETE CASCADE,
+    PRIMARY KEY(portfolioID)
+);
+
+CREATE TABLE IF NOT EXISTS OwnsStockList(
+    userID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    stockListID INT REFERENCES StockLists(stockListID) ON DELETE CASCADE,
+    PRIMARY KEY(stockListID)
+);
+
+CREATE TABLE IF NOT EXISTS AccessibleBy(
+    userID INT REFERENCES Accounts(userID) ON DELETE CASCADE,
+    stockListID INT REFERENCES StockLists(stockListID) ON DELETE CASCADE,
+    PRIMARY KEY(userID, stockListID)
+);
+
+CREATE TABLE IF NOT EXISTS StockListStocks(
+    stockListID INT REFERENCES StockLists(stockListID) ON DELETE CASCADE,
+    symbol VARCHAR(10) REFERENCES Stocks(symbol) ON DELETE CASCADE,
+    numShares INT,
+    PRIMARY KEY(stockListID, symbol)
+);
+
+CREATE TABLE IF NOT EXISTS PortfolioStocks(
+    portfolioID INT REFERENCES Portfolios(portfolioID) ON DELETE CASCADE,
+    stockListID INT REFERENCES StockLists(stockListID) ON DELETE CASCADE,
+    PRIMARY KEY(portfolioID, stockListID)
+);
+
+-- REVIEW FUNCTIONALITY --
+
+INSERT INTO ReviewRequests(sentUserID, receivedUserID, stockListID) VALUES (<loggedInUserID>, <friendID>, <stockListID>)
+
+SELECT sentUserID, firstName, lastName, email, StockLists.stockListID, stockListName, dateTime FROM ReviewRequests JOIN Accounts ON ReviewRequests.sentUserID = Accounts.userID JOIN StockLists ON ReviewRequests.stockListID = StockLists.stockListID WHERE sentUserID = <loggedInUserID>
+
+SELECT sentUserID, firstName, lastName, email, StockLists.stockListID, stockListName, dateTime FROM ReviewRequests JOIN Accounts ON ReviewRequests.sentUserID = Accounts.userID JOIN StockLists ON ReviewRequests.stockListID = StockLists.stockListID WHERE receivedUserID = <loggedInUserID>
+
+SELECT 1 FROM Reviews WHERE stockListID = <stockListID> AND userID = <loggedInUserID>
+
+UPDATE Reviews SET timestamp = CURRENT_TIMESTAMP, response = '<text>' WHERE userID = <loggedInUserID> AND stockListID = <stockListID>
+
+INSERT INTO Reviews(userID, stockListID, response) VALUES(<loggedInUserID>, <stockListID>, <text>)
+
+SELECT userID, StockLists.stockListID, category FROM OwnsStockList NATURAL JOIN StockLists WHERE StockLists.stockListID = <stockListID>
+
+SELECT userID, firstName, lastName, email, timestamp, response FROM Reviews NATURAL JOIN Accounts WHERE stockListID = <stockListID>
+
+SELECT userID, firstName, lastName, email, timestamp, response FROM Reviews NATURAL JOIN Accounts WHERE stockListID = <stockListID> AND userID = <loggedInUserID>
+
+DELETE FROM ReviewRequests WHERE receivedUserID = <loggedInUserID> AND stockListID = <stockListID>
+
+DELETE FROM Reviews WHERE userID = <reviewUserID> AND stockListID = <stockListID>
+
+-- PORTFOLIO FUNCTIONALITY --
+
+SELECT 1 FROM OwnsPortfolio NATURAL JOIN Portfolios WHERE portfolioName = <portfolioName>
+
+INSERT INTO Portfolios(portfolioName) VALUES(<portfolioName>) RETURNING portfolioID
+
+INSERT INTO OwnsPortfolio(userID, portfolioID) VALUES(<loggedInUserID>, <portfolioID>)
+
+INSERT INTO PortfolioStocks(portfolioID, stockListID) VALUES(<portfolioID>, <stockListID>)
+
+SELECT portfolioID, portfolioName, cashAvailable FROM OwnsPortfolio NATURAL JOIN Portfolios WHERE userID = <loggedInUserID>
+
+SELECT stockListID FROM PortfolioStocks WHERE portfolioID = <portfolioID>
+
+SELECT cashAvailable FROM Portfolios WHERE portfolioID = <portfolioID>
+
+UPDATE Portfolios SET cashAvailable = <cashAvailable> WHERE portfolioID = <portfolioID>
+
+SELECT stockListID FROM PortfolioStocks WHERE portfolioID = <portfolioID>
+
+SELECT numShares FROM StockListStocks WHERE stockListID = <stockListID> AND symbol = '<stockSymbol>'
+
+-- STOCK FUNCTIONALITY --
+
+SELECT timestamp, open, close, high, low, volume FROM DailyStocks WHERE symbol = '<stockSymbol>' AND timestamp >= '<startTime>' AND timestamp <= '<endTime>' ORDER BY timestamp ASC
+
+SELECT close FROM DailyStocks WHERE symbol = '<stockSymbol>' AND timestamp >= '<startTime>' AND timestamp <= '<endTime>' ORDER BY timestamp ASC
+
+SELECT close FROM DailyStocks WHERE symbol= '<stockSymbol>' AND timestamp <= '<endTimeOfKnownPrice>' ORDER BY timestamp DESC LIMIT 2
+
+SELECT 1 FROM DailyStocks WHERE symbol = '<stockSymbol>' AND timestamp = '<timestamp>' LIMIT(1)
+
+INSERT INTO DailyStocks(symbol, timestamp, open, close, high, low, volume) VALUES(<stockSymbol>, <timestamp>, <open>, <close>, <high>, <low>, <volume>)
+
+SELECT close FROM DailyStocks WHERE symbol = '<stockSymbol>' and timestamp >= ALL(SELECT timestamp FROM DailyStocks WHERE symbol = '<stockSymbol>')
+
+-- STOCK LIST FUNCTIONALITY --
+
+SELECT 1 FROM OwnsStockList NATURAL JOIN StockLists WHERE stockListName = '<stockListName>' AND userID = <loggedInUserID>
+
+INSERT INTO StockLists(stockListName, category) VALUES('<stockListName>', '<category>') RETURNING stockListID
+
+INSERT INTO OwnsStockList(userID, stockListID) VALUES(<loggedInUserID>, <stockListID>)
+
+SELECT stockListID, stockListName, category FROM OwnsStockList NATURAL JOIN StockLists WHERE userID = <loggedInUserID> AND category != 'linkedToPortfolio'
+
+DELETE FROM StockLists WHERE stockListID = <stockListID>
+
+SELECT 1 FROM Stocks WHERE symbol = '<stockSymbol>'
+
+SELECT 1 FROM StockListStocks WHERE stockListID = <stockListID> AND symbol = '<stockSymbol>'
+
+INSERT INTO StockListStocks (stockListID, symbol, numShares) VALUES ('<stockListID>', '<stockSymbol>', '<numShares>') ON CONFLICT(stockListID, symbol) DO UPDATE SET numShares = StockListStocks.numShares + numShares
+
+DELETE FROM StockListStocks WHERE stockListID = <stockListID> AND symbol = '<stockSymbol>'
+
+SELECT symbol, numShares FROM StockListStocks WHERE stockListID = <stockListID>
+
+SELECT SUM(value) AS marketValueOfStockList FROM (SELECT ds.symbol, ds.close, numShares, ds.close * numShares AS value FROM (DailyStocks ds JOIN (SELECT symbol, MAX(timestamp) AS latest_timestamp FROM DailyStocks GROUP BY symbol) sub ON ds.symbol = sub.symbol AND ds.timestamp = sub.latest_timestamp) JOIN StockListStocks ON ds.symbol = StockListStocks.symbol WHERE stockListID = <stockListID>)
+
+UPDATE StockLists SET category = '<newCategory>' WHERE stockListID = <stockListID>
+
+DELETE FROM AccessibleBy WHERE stockListID = <stockListID>
+
+SELECT category FROM StockLists WHERE stockListID = '<stockListID>'
+
+INSERT INTO AccessibleBy(userID, stockListID) VALUES(<friendID>, <stockListID>) ON CONFLICT DO NOTHING
+
+SELECT stockListID, stockListName, firstName, lastName, email FROM OwnsStockList NATURAL JOIN StockLists NATURAL JOIN Accounts" WHERE category = 'public'
+
+SELECT StockLists.stockListID, stockListName, firstName, lastName, email FROM OwnsStockList NATURAL JOIN StockLists NATURAL JOIN Accounts JOIN AccessibleBy ON StockLists.stockListID = AccessibleBy.stockListID WHERE AccessibleBy.userID = <loggedInUserID>
+
+SELECT symbol FROM stockListStocks WHERE stockListID = <stockListID>
+
+SELECT timestamp, close FROM DailyStocks WHERE symbol = '<symbol>' AND timestamp >= '<startTime>' AND timestamp <= '<endTime>' ORDER BY timestamp ASC
+
+-- ACCOUNT FUNCTIONALITY --
+
+INSERT INTO Accounts(firstName, lastName, email, password) VALUES('<firstName>', '<lastName>', '<email>', '<password>') RETURNING userID
+
+SELECT userID FROM Accounts WHERE email = '<email>' AND password = '<password>'
+
+SELECT 1 FROM Accounts WHERE email = '<email>'
+
+SELECT userID FROM Accounts WHERE email = '<email>'
+
+-- FRIEND FUNCTIONALITY --
+
+SELECT status, dateTimeAddedDeleted FROM Friends WHERE ((user1 = '<loggedInUserID>' AND user2 = '<friendID>') OR (user1 = '<friendID>' AND user2 = '<loggedInUserID>'))
+
+SELECT sentUserID AS user1, receivedUserID AS user2, status, dateTime FROM FriendRequests WHERE sentUserID = '<loggedInUserID>' AND receivedUserID = '<friendID>' UNION SELECT sentUserID AS user1, receivedUserID AS user2, status, dateTime FROM FriendRequests WHERE sentUserID = '<friendID>' AND receivedUserID = '<loggedInUserID>'
+
+INSERT INTO FriendRequests(sentUserID, receivedUserID) VALUES(<loggedInUserID>, <friendID>)
+
+SELECT firstName, lastName, email, dateTime FROM FriendRequests JOIN Accounts ON FriendRequests.receivedUserID = Accounts.userID WHERE sentUserID = '<loggedInUserID>' AND status = 'pending'
+
+SELECT sentUserID, firstName, lastName, email, dateTime FROM FriendRequests JOIN Accounts ON FriendRequests.sentUserID = Accounts.userID WHERE receivedUserID = '<loggedInUserID>' AND status = 'pending'
+
+SELECT 1 FROM Friends WHERE ((user1 = '<loggedInUserID>' AND user2 = '<sentUserID>') OR (user2 = '<loggedInUserID>' AND user1 = '<sentUserID>')) AND status = 'deleted'
+
+UPDATE Friends SET status = 'added', dateTimeAddedDeleted = CURRENT_TIMESTAMP WHERE ((user1 = '<loggedInUserID>' AND user2 = '<sentUserID>') OR (user2 = '<loggedInUserID>' AND user1 = '<sentUserID>')) AND status = 'deleted'
+
+INSERT INTO Friends(user1, user2) VALUES(<loggedInUserID>, <sentUserID>)
+
+DELETE FROM FriendRequests WHERE sentUserID = '<sentUserID>' AND receivedUserID = '<loggedInUserID>'
+
+UPDATE FriendRequests SET status = 'rejected', dateTime = CURRENT_TIMESTAMP WHERE sentUserID = '<sentUserID>' AND receivedUserID = '<loggedInUserID>'
+
+(SELECT user1 AS friend, firstName, lastName, email FROM Accounts JOIN Friends ON Accounts.userID = Friends.user1 WHERE user2 = '<loggedInUserID>' AND status = 'added') UNION (SELECT user2 AS friend, firstName, lastName, email FROM Accounts JOIN Friends ON Accounts.userID = Friends.user2 WHERE user1 = '<loggedInUserID>' AND status = 'added')
+
+UPDATE Friends SET status = 'deleted', dateTimeAddedDeleted = CURRENT_TIMESTAMP WHERE (user1 = '<friendID>' AND user2 = '<loggedInUserID>') OR (user1 = '<loggedInUserID>' AND user2 = '<friendID>')
+
+SELECT user1, user2 FROM Friends WHERE (user1 = '<loggedInUserID>' AND user2 = '<friendID>') OR (user2 = '<loggedInUserID>' AND user1 = '<friendID>')
